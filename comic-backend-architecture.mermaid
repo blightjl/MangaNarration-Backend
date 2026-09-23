@@ -1,0 +1,76 @@
+flowchart TB
+    Author(["Author"])
+    FE["Frontend Editor<br/>Next.js"]
+    Author --> FE
+
+    subgraph Backend["Spring Boot Backend"]
+        direction TB
+
+        subgraph API["API Layer"]
+            REST["REST Controllers"]
+            SEC["Spring Security<br/>auth, rate limits, quotas"]
+            SSE["SSE Progress Stream"]
+        end
+
+        subgraph Jobs["Job Orchestration"]
+            JOBTABLE["Job Table<br/>QUEUED → RUNNING → SUCCEEDED / FAILED"]
+            WORKERS["Workers<br/>virtual threads, retries, idempotent"]
+        end
+
+        subgraph Services["Pipeline Services"]
+            SCRIPT["1. Script Service<br/>idea → structured script"]
+            CHAR["2. Character Service<br/>reference sheets"]
+            PANEL["3. Panel Service<br/>prompt builder + versions"]
+            LETTER["4. Lettering Service<br/>bubbles stored as data"]
+            NARR["5. Narration Service<br/>one clip per line"]
+            EXPORT["6. Export Service<br/>PNG, PDF, audio track"]
+        end
+
+        subgraph Providers["Provider Adapters (interfaces)"]
+            LLMA["LlmClient"]
+            IMGA["ImageGenerator"]
+            TTSA["SpeechSynthesizer"]
+        end
+
+        ASSET["Asset Service<br/>uploads + presigned URLs"]
+        USAGE["Usage Tracking<br/>cost per job and user"]
+    end
+
+    subgraph External["External AI APIs"]
+        CLAUDE["Claude"]
+        IMGAPI["Image Model<br/>Flux / SD / OpenAI"]
+        TTSAPI["Text-to-Speech<br/>ElevenLabs / OpenAI"]
+    end
+
+    subgraph Data["Storage"]
+        PG[("PostgreSQL<br/>projects, script, panels,<br/>bubbles, jobs, usage")]
+        S3[("S3 / MinIO<br/>images, audio, exports")]
+    end
+
+    FE -->|"REST calls"| SEC
+    SEC --> REST
+    SSE -->|"live progress"| FE
+    FE -->|"load images and audio"| S3
+
+    REST -->|"quick edits: script, bubbles"| PG
+    REST -->|"create job, return 202"| JOBTABLE
+    JOBTABLE -->|"claim job"| WORKERS
+    WORKERS --> SCRIPT & CHAR & PANEL & LETTER & NARR & EXPORT
+    WORKERS -->|"status events"| SSE
+
+    SCRIPT --> LLMA
+    CHAR --> IMGA
+    PANEL --> IMGA
+    LETTER -.->|"optional vision placement"| LLMA
+    NARR --> TTSA
+
+    LLMA --> CLAUDE
+    IMGA --> IMGAPI
+    TTSA --> TTSAPI
+
+    LLMA & IMGA & TTSA --> USAGE
+    USAGE --> PG
+    JOBTABLE --> PG
+    Services -->|"save results"| PG
+    Services -->|"save files"| ASSET
+    ASSET --> S3
